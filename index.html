@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rhythm Boss - Touch & Play</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap');
+        
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background: #000; color: #fff; font-family: 'Syncopate', sans-serif; 
+            overflow: hidden; touch-action: none;
+        }
+
+        #game-board {
+            position: relative; width: 100%; max-width: 600px; height: 100vh;
+            margin: 0 auto; background: #080808; display: flex;
+            border-left: 2px solid #222; border-right: 2px solid #222;
+        }
+
+        /* DOKUNMATİK YOLLAR */
+        .lane { 
+            position: relative; height: 100%; flex: 1;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            display: flex; align-items: flex-end; justify-content: center;
+        }
+
+        .hit-zone-visual { 
+            position: absolute; bottom: 10%; width: 100%; height: 80px; 
+            border-top: 2px solid #0ff; background: rgba(0,255,255,0.05); pointer-events: none;
+        }
+
+        .note { 
+            position: absolute; width: 80%; height: 25px; border-radius: 15px;
+            box-shadow: 0 0 15px currentColor; z-index: 10;
+        }
+
+        /* RENKLER */
+        .c0 { color: #f05; background: #f05; }
+        .c1 { color: #0f9; background: #0f9; }
+        .c2 { color: #0cf; background: #0cf; }
+        .c3 { color: #fc0; background: #fc0; }
+
+        /* UI */
+        #score-display { position: absolute; top: 20px; left: 20px; font-size: 20px; color: #0ff; z-index: 100; }
+        .overlay { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
+            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; 
+        }
+        .btn { background: #0ff; color: #000; border: none; padding: 15px 30px; font-family: 'Syncopate'; cursor: pointer; margin-top: 20px; }
+        .key-label { margin-bottom: 20px; font-size: 1.5rem; opacity: 0.5; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="score-display">SCORE: <span id="val">0</span></div>
+
+<div id="game-board">
+    <div class="hit-zone-visual"></div>
+    <div class="lane" id="l0" onmousedown="handleInput(0)" ontouchstart="handleInput(0)"><div class="key-label" id="kb0">D</div></div>
+    <div class="lane" id="l1" onmousedown="handleInput(1)" ontouchstart="handleInput(1)"><div class="key-label" id="kb1">F</div></div>
+    <div class="lane" id="l2" onmousedown="handleInput(2)" ontouchstart="handleInput(2)"><div class="key-label" id="kb2">J</div></div>
+    <div class="lane" id="l3" onmousedown="handleInput(3)" ontouchstart="handleInput(3)"><div class="key-label" id="kb3">K</div></div>
+</div>
+
+<div id="game-over" class="overlay">
+    <h1 style="color:#f05">ELENDİN!</h1>
+    <h2 id="final-score">SCORE: 0</h2>
+    <button class="btn" onclick="reset()">BAŞTAN BAŞLA</button>
+</div>
+
+<script>
+    let keys = ['KeyD', 'KeyF', 'KeyJ', 'KeyK'];
+    let score = 0;
+    let notes = [];
+    let active = true;
+    let speed = 6;
+
+    function handleInput(laneIdx) {
+        if(!active) return;
+        
+        const h = window.innerHeight;
+        const hitStart = h * 0.9 - 100;
+        const hitEnd = h * 0.9 + 20;
+
+        const target = notes.findIndex(n => n.l === laneIdx && n.y > hitStart && n.y < hitEnd);
+
+        if(target !== -1) {
+            score += 10;
+            document.getElementById('val').innerText = score;
+            notes[target].el.remove();
+            notes.splice(target, 1);
+            speed += 0.03;
+        } else {
+            endGame();
+        }
+    }
+
+    window.onkeydown = (e) => {
+        let idx = keys.indexOf(e.code);
+        if(idx !== -1) handleInput(idx);
+        else if(active) endGame();
+    };
+
+    function spawn() {
+        if(!active) return;
+        let l = Math.floor(Math.random()*4);
+        let el = document.createElement('div');
+        el.className = `note c${l}`;
+        document.getElementById(`l${l}`).appendChild(el);
+        notes.push({ el, l, y: -30 });
+        setTimeout(spawn, Math.max(300, 800 - (score/2)));
+    }
+
+    function loop() {
+        if(active) {
+            for(let i=notes.length-1; i>=0; i--) {
+                notes[i].y += speed;
+                notes[i].el.style.top = notes[i].y + 'px';
+                if(notes[i].y > window.innerHeight) endGame();
+            }
+        }
+        requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+        active = false;
+        document.getElementById('game-over').style.display = 'flex';
+        document.getElementById('final-score').innerText = "SCORE: " + score;
+    }
+
+    function reset() {
+        notes.forEach(n => n.el.remove());
+        notes = []; score = 0; speed = 6; active = true;
+        document.getElementById('val').innerText = "0";
+        document.getElementById('game-over').style.display = 'none';
+        spawn();
+    }
+
+    spawn();
+    loop();
+</script>
+</body>
+</html>
