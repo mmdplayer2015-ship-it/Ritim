@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rhythm Boss - Touch & Play</title>
+    <title>Rhythm Boss - Ultimate Edition</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap');
         
@@ -15,25 +15,26 @@
         }
 
         #game-board {
-            position: relative; width: 100%; max-width: 600px; height: 100vh;
-            margin: 0 auto; background: #080808; display: flex;
-            border-left: 2px solid #222; border-right: 2px solid #222;
+            position: relative; width: 100%; max-width: 550px; height: 100vh;
+            margin: 0 auto; background: linear-gradient(180deg, #050505 0%, #111 100%);
+            display: flex; border-left: 2px solid #222; border-right: 2px solid #222;
         }
 
-        /* DOKUNMATİK YOLLAR */
+        /* YOLLAR VE VURUŞ ALANI */
         .lane { 
             position: relative; height: 100%; flex: 1;
             border-right: 1px solid rgba(255,255,255,0.05);
             display: flex; align-items: flex-end; justify-content: center;
+            cursor: pointer;
         }
-
         .hit-zone-visual { 
-            position: absolute; bottom: 10%; width: 100%; height: 80px; 
+            position: absolute; bottom: 12%; width: 100%; height: 80px; 
             border-top: 2px solid #0ff; background: rgba(0,255,255,0.05); pointer-events: none;
+            z-index: 5;
         }
 
         .note { 
-            position: absolute; width: 80%; height: 25px; border-radius: 15px;
+            position: absolute; width: 85%; height: 20px; border-radius: 10px;
             box-shadow: 0 0 15px currentColor; z-index: 10;
         }
 
@@ -43,19 +44,37 @@
         .c2 { color: #0cf; background: #0cf; }
         .c3 { color: #fc0; background: #fc0; }
 
-        /* UI */
-        #score-display { position: absolute; top: 20px; left: 20px; font-size: 20px; color: #0ff; z-index: 100; }
+        /* UI KATMANLARI */
+        #hud {
+            position: absolute; top: 0; width: 100%; padding: 20px;
+            display: flex; justify-content: space-between; align-items: center; z-index: 100;
+        }
+        .score-box { font-size: 1.2rem; color: #0ff; text-shadow: 0 0 10px #0ff; }
+        .btn-ui { 
+            background: #0ff; color: #000; border: none; padding: 10px 15px; 
+            font-weight: bold; cursor: pointer; font-family: 'Syncopate';
+        }
+
         .overlay { 
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95); 
             display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; 
         }
-        .btn { background: #0ff; color: #000; border: none; padding: 15px 30px; font-family: 'Syncopate'; cursor: pointer; margin-top: 20px; }
-        .key-label { margin-bottom: 20px; font-size: 1.5rem; opacity: 0.5; font-weight: bold; }
+
+        .key-input {
+            background: #222; color: #0ff; border: 2px solid #444;
+            width: 60px; height: 60px; text-align: center; font-size: 25px; margin: 10px;
+            border-radius: 8px; font-family: 'Syncopate';
+        }
+
+        .key-label { margin-bottom: 30px; font-size: 1.2rem; opacity: 0.3; }
     </style>
 </head>
 <body>
 
-<div id="score-display">SCORE: <span id="val">0</span></div>
+<div id="hud">
+    <div class="score-box">SCORE: <span id="score-val">0</span></div>
+    <button class="btn-ui" onclick="openSettings()">AYARLAR</button>
+</div>
 
 <div id="game-board">
     <div class="hit-zone-visual"></div>
@@ -65,57 +84,70 @@
     <div class="lane" id="l3" onmousedown="handleInput(3)" ontouchstart="handleInput(3)"><div class="key-label" id="kb3">K</div></div>
 </div>
 
+<div id="settings-modal" class="overlay">
+    <h2 style="color:#0ff">TUŞLARI AYARLA</h2>
+    <div style="display:flex">
+        <input type="text" id="in0" class="key-input" maxlength="1">
+        <input type="text" id="in1" class="key-input" maxlength="1">
+        <input type="text" id="in2" class="key-input" maxlength="1">
+        <input type="text" id="in3" class="key-input" maxlength="1">
+    </div>
+    <p id="err" style="color:#f05; font-size: 12px; height: 20px;"></p>
+    <button class="btn-ui" onclick="saveSettings()">KAYDET VE BAŞLA</button>
+</div>
+
 <div id="game-over" class="overlay">
-    <h1 style="color:#f05">ELENDİN!</h1>
+    <h1 style="color:#f05; font-size: 40px;">ELENDİN!</h1>
     <h2 id="final-score">SCORE: 0</h2>
-    <button class="btn" onclick="reset()">BAŞTAN BAŞLA</button>
+    <button class="btn-ui" onclick="restart()">YENİDEN DENE</button>
 </div>
 
 <script>
-    let keys = ['KeyD', 'KeyF', 'KeyJ', 'KeyK'];
+    let configKeys = JSON.parse(localStorage.getItem('rbKeys')) || ['KeyD', 'KeyF', 'KeyJ', 'KeyK'];
     let score = 0;
     let notes = [];
-    let active = true;
+    let isRunning = true;
     let speed = 6;
+    let spawnInterval = 800;
 
     function handleInput(laneIdx) {
-        if(!active) return;
-        
+        if(!isRunning) return;
         const h = window.innerHeight;
-        const hitStart = h * 0.9 - 100;
-        const hitEnd = h * 0.9 + 20;
+        const hitStart = h * 0.88 - 100;
+        const hitEnd = h * 0.88 + 30;
 
-        const target = notes.findIndex(n => n.l === laneIdx && n.y > hitStart && n.y < hitEnd);
+        const targetIdx = notes.findIndex(n => n.l === laneIdx && n.y > hitStart && n.y < hitEnd);
 
-        if(target !== -1) {
+        if(targetIdx !== -1) {
             score += 10;
-            document.getElementById('val').innerText = score;
-            notes[target].el.remove();
-            notes.splice(target, 1);
-            speed += 0.03;
+            document.getElementById('score-val').innerText = score;
+            notes[targetIdx].el.remove();
+            notes.splice(targetIdx, 1);
+            speed += 0.04;
         } else {
             endGame();
         }
     }
 
     window.onkeydown = (e) => {
-        let idx = keys.indexOf(e.code);
+        if(!isRunning) return;
+        const idx = configKeys.indexOf(e.code);
         if(idx !== -1) handleInput(idx);
-        else if(active) endGame();
+        else if(!['F11', 'F12'].includes(e.code)) endGame();
     };
 
     function spawn() {
-        if(!active) return;
+        if(!isRunning) return;
         let l = Math.floor(Math.random()*4);
         let el = document.createElement('div');
         el.className = `note c${l}`;
         document.getElementById(`l${l}`).appendChild(el);
         notes.push({ el, l, y: -30 });
-        setTimeout(spawn, Math.max(300, 800 - (score/2)));
+        setTimeout(spawn, Math.max(250, spawnInterval - (score/2)));
     }
 
     function loop() {
-        if(active) {
+        if(isRunning) {
             for(let i=notes.length-1; i>=0; i--) {
                 notes[i].y += speed;
                 notes[i].el.style.top = notes[i].y + 'px';
@@ -125,20 +157,42 @@
         requestAnimationFrame(loop);
     }
 
+    function openSettings() {
+        isRunning = false;
+        document.getElementById('settings-modal').style.display = 'flex';
+        configKeys.forEach((k, i) => document.getElementById('in'+i).value = k.replace('Key','').replace('Digit',''));
+    }
+
+    function saveSettings() {
+        let newKeys = [];
+        for(let i=0; i<4; i++) {
+            let val = document.getElementById('in'+i).value.toUpperCase();
+            if(!val) { document.getElementById('err').innerText = "Boş bırakma!"; return; }
+            let kCode = isNaN(val) ? 'Key'+val : 'Digit'+val;
+            if(newKeys.includes(kCode)) { document.getElementById('err').innerText = "Aynı tuş kullanılamaz!"; return; }
+            newKeys.push(kCode);
+        }
+        configKeys = newKeys;
+        localStorage.setItem('rbKeys', JSON.stringify(configKeys));
+        document.getElementById('settings-modal').style.display = 'none';
+        restart();
+    }
+
     function endGame() {
-        active = false;
+        isRunning = false;
         document.getElementById('game-over').style.display = 'flex';
         document.getElementById('final-score').innerText = "SCORE: " + score;
     }
 
-    function reset() {
+    function restart() {
         notes.forEach(n => n.el.remove());
-        notes = []; score = 0; speed = 6; active = true;
-        document.getElementById('val').innerText = "0";
+        notes = []; score = 0; speed = 6; isRunning = true;
+        document.getElementById('score-val').innerText = "0";
         document.getElementById('game-over').style.display = 'none';
-        spawn();
+        configKeys.forEach((k, i) => document.getElementById('kb'+i).innerText = k.replace('Key','').replace('Digit',''));
     }
 
+    configKeys.forEach((k, i) => document.getElementById('kb'+i).innerText = k.replace('Key','').replace('Digit',''));
     spawn();
     loop();
 </script>
